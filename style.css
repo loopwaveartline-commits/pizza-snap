@@ -1,225 +1,360 @@
-/* Reset */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+// 1️⃣ Select elements by ID
+const menu = document.getElementById("menu");
+const startBtn = document.getElementById("start-btn");
+const pizza = document.getElementById("pizza");
+
+// 2️⃣ Game settings
+let currentLevel = 1;
+const maxLevel = 70;
+let score = 0;
+let gameRunning = false; // prevent multiple concurrent games
+let currentInterval = null;
+let currentHideTimeout = null;
+let hitsThisLevel = 0;
+let pendingNext = null;
+
+// 5 positions pizza can appear
+const positions = [
+    {top: "10%", left: "50%", name: 'top'},   // top-middle
+    {top: "50%", left: "97%", name: 'right'}, // right-middle (near edge)
+    {top: "90%", left: "50%", name: 'bottom'},// bottom-middle
+    {top: "50%", left: "3%", name: 'left'},  // very-left (near edge)
+    {top: "50%", left: "50%", name: 'center'} // center
+];
+let currentPosName = null;
+const game = document.getElementById('game');
+
+// scoring system
+let streak = 0; // consecutive successful catches
+let multiplier = 1; // visual multiplier
+let pointsThisLevel = 0;
+let pizzaCaughtThisAppearance = false;
+let highScore = parseInt(localStorage.getItem('pizzaHighScore') || '0', 10) || 0;
+
+// 3️⃣ Start button click
+startBtn.addEventListener("click", () => {
+    if (gameRunning) return; // ignore repeated clicks
+    gameRunning = true;
+    // hide menu and start
+    menu.style.display = "none";
+    updateHUD();
+    startLevel(currentLevel);
+});
+
+// results modal elements
+const resultsModal = document.getElementById('level-results');
+const resLevel = document.getElementById('res-level');
+const resHits = document.getElementById('res-hits');
+const resScore = document.getElementById('res-score');
+const continueBtn = document.getElementById('continue-btn');
+const quitBtn = document.getElementById('quit-btn');
+
+function showResults(level, hits) {
+    if (!resultsModal) return;
+    resLevel.textContent = `Level: ${level}`;
+    resHits.textContent = `Hits: ${hits}`;
+    resScore.textContent = `Score: ${score}`;
+    const resPoints = document.getElementById('res-points');
+    if (resPoints) resPoints.textContent = `Points: ${pointsThisLevel}`;
+    resultsModal.style.display = 'flex';
+    // play a special sound if player scored 0 this level
+    if (hits === 0) playZeroSound();
 }
 
-body {
-    width: 100vw;
-    height: 100vh;
-    background: #97e0c8;
-    overflow: hidden;
-    /* use the pixel/monospace look for all game text */
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 16px; /* base font-size for desktop */
+function hideResults() {
+    if (!resultsModal) return;
+    resultsModal.style.display = 'none';
 }
 
-/* MENU */
-#menu {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
+continueBtn.addEventListener('click', () => {
+    hideResults();
+    if (pendingNext) {
+        if (pendingNext <= maxLevel) {
+            currentLevel = pendingNext;
+            pendingNext = null;
+            updateHUD();
+            startLevel(currentLevel);
+            return;
+        }
+        // finished all levels
+        alert("Congratulations! You finished all levels!");
+    }
+    // reset and show menu
+    gameRunning = false;
+    menu.style.display = 'block';
+    currentLevel = 1;
+    score = 0;
+    pendingNext = null;
+    updateHUD();
+});
 
-    /* keep the menu on top so its buttons are clickable */
-    z-index: 10;
+quitBtn.addEventListener('click', () => {
+    hideResults();
+    // stop game and return to menu
+    if (currentInterval) { clearInterval(currentInterval); currentInterval = null; }
+    if (currentHideTimeout) { clearTimeout(currentHideTimeout); currentHideTimeout = null; }
+    gameRunning = false;
+    menu.style.display = 'block';
+    currentLevel = 1;
+    score = 0;
+    pendingNext = null;
+    updateHUD();
+});
+
+// update HUD display
+function updateHUD() {
+    const scoreEl = document.getElementById("score");
+    const levelEl = document.getElementById("level");
+    const comboEl = document.getElementById('combo');
+    const hsEl = document.getElementById('highscore');
+    if (scoreEl) scoreEl.textContent = `Score: ${score}`;
+    if (levelEl) levelEl.textContent = `Level: ${currentLevel}`;
+    if (comboEl) comboEl.textContent = `Combo: x${multiplier.toFixed(2)}`;
+    if (hsEl) hsEl.textContent = `High: ${highScore}`;
 }
 
-#menu img#logo {
-    width: clamp(160px, 40vw, 300px);
-    margin-bottom: 20px;
+// 4️⃣ Function to start a level
+function startLevel(level) {
+    // each level should show the pizza 20 times
+    const appearances = 20;
+    let count = 0;
+    hitsThisLevel = 0;
+
+    // show small hint every 10 levels
+    if (level % 10 === 0) {
+        alert(`Level ${level}! Difficulty increased!`);
+    }
+
+    // clear any previous interval/timeout just in case
+    if (currentInterval) {
+        clearInterval(currentInterval);
+        currentInterval = null;
+    }
+    if (currentHideTimeout) {
+        clearTimeout(currentHideTimeout);
+        currentHideTimeout = null;
+    }
+
+    // speed: visible time and gap reduce as level increases
+    const visibleMs = Math.max(300, 1000 - (level - 1) * 10); // decreases by 10ms per level
+    const gapMs = Math.max(150, 500 - Math.floor((level - 1) * 5)); // decreases by 5ms per level
+    const intervalMs = visibleMs + gapMs;
+
+    currentInterval = setInterval(() => {
+        // pizza random position
+        const pos = positions[Math.floor(Math.random() * positions.length)];
+        pizza.style.top = pos.top;
+        pizza.style.left = pos.left;
+        currentPosName = pos.name || null;
+        // adjust transform so edge positions don't overflow the viewport
+        let transformValue = 'translate(-50%, -50%)';
+        if (currentPosName === 'left') transformValue = 'translate(0, -50%)';
+        if (currentPosName === 'right') transformValue = 'translate(-100%, -50%)';
+        pizza.style.transform = transformValue;
+        // center appearance: no special sound
+        pizza.style.display = "block";
+
+        // hide pizza after visibleMs if not clicked
+        // store the timeout so we can clear it when clicked or when level ends
+        if (currentHideTimeout) {
+            clearTimeout(currentHideTimeout);
+            currentHideTimeout = null;
+        }
+        pizzaCaughtThisAppearance = false;
+        currentHideTimeout = setTimeout(() => {
+            // if it wasn't caught, reset streak/multiplier
+            if (!pizzaCaughtThisAppearance) {
+                streak = 0;
+                multiplier = 1;
+                updateHUD();
+            }
+            pizza.style.display = "none";
+            currentHideTimeout = null;
+        }, visibleMs);
+
+        // If pizza is clicked, the click handler will hide it and increment score.
+
+        count++;
+
+        if (count >= appearances) {
+            // stop this level
+            if (currentInterval) {
+                clearInterval(currentInterval);
+                currentInterval = null;
+            }
+            if (currentHideTimeout) {
+                clearTimeout(currentHideTimeout);
+                currentHideTimeout = null;
+            }
+            pizza.style.display = 'none';
+            // show results for this level and wait for user to continue
+            pendingNext = level + 1;
+            showResults(level, hitsThisLevel);
+            // reset per-level points (will be updated when continuing)
+            // pointsThisLevel is preserved for display
+        }
+    }, intervalMs);
 }
 
-#menu img#start-btn {
-    width: clamp(140px, 48vw, 200px); /* responsive start button */
-    cursor: pointer;
-    transition: 0.2s;
+// Handle pizza clicks (score)
+pizza.addEventListener('click', () => {
+    // only count click when pizza is visible
+    if (pizza.style.display === 'block') {
+        // clear any pending hide timeout so it doesn't race
+        if (currentHideTimeout) {
+            clearTimeout(currentHideTimeout);
+            currentHideTimeout = null;
+        }
+        pizzaCaughtThisAppearance = true;
+        // handle scoring
+        streak++;
+        // multiplier increases every 3-streaks by +0.5, cap at +4 steps
+        multiplier = 1 + Math.min(4, Math.floor(streak / 3)) * 0.5;
+        awardPoints(currentLevel);
+        hitsThisLevel++;
+        pizza.style.display = 'none';
+        // play click sound (synth)
+        playDropSound();
+    }
+});
+
+// Keyboard controls: Arrow keys catch pizza if it appears in that position
+document.addEventListener('keydown', (e) => {
+    if (!gameRunning) return;
+    if (pizza.style.display !== 'block') return;
+    const key = e.key;
+    let matched = false;
+    if (key === 'ArrowUp' && currentPosName === 'top') matched = true;
+    if (key === 'ArrowDown' && currentPosName === 'bottom') matched = true;
+    if (key === 'ArrowLeft' && currentPosName === 'left') matched = true;
+    if (key === 'ArrowRight' && currentPosName === 'right') matched = true;
+    // allow '0' (zero) or numpad 0 to catch the center pizza
+    if ((key === '0' || key === 'Numpad0') && currentPosName === 'center') matched = true;
+    if (matched) {
+        // simulate click/catch
+        if (currentHideTimeout) { clearTimeout(currentHideTimeout); currentHideTimeout = null; }
+        pizzaCaughtThisAppearance = true;
+        streak++;
+        multiplier = 1 + Math.min(4, Math.floor(streak / 3)) * 0.5;
+        awardPoints(currentLevel);
+        hitsThisLevel++;
+        pizza.style.display = 'none';
+        playDropSound();
+    }
+});
+
+// award points for a single catch
+function awardPoints(level) {
+    const base = 10 + Math.floor(level * 1.5);
+    const points = Math.round(base * multiplier);
+    score += points;
+    pointsThisLevel += points;
+    // update high score
+    if (score > highScore) {
+        highScore = score;
+        try { localStorage.setItem('pizzaHighScore', String(highScore)); } catch (e) {}
+    }
+    updateHUD();
+    // show floating points
+    showPointsPop(points);
 }
 
-.menu-btn {
-    display: inline-block;
-    margin-top: 12px;
-    padding: 10px 18px;
-    border-radius: 12px;
-    border: none;
-    background: linear-gradient(180deg,#ffd54f,#ffb300);
-    color: #3b2e00;
-    cursor: pointer;
-    font-weight: 800;
-    box-shadow: 0 6px 0 rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.6);
-    transition: transform 120ms ease, box-shadow 120ms ease;
-    /* inherit the global monospace/pixel aesthetic */
-    font-family: inherit;
-}
-.menu-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 0 rgba(0,0,0,0.18); }
-.menu-btn:active { transform: translateY(0); box-shadow: 0 6px 0 rgba(0,0,0,0.18); }
-
-#menu img#start-btn:hover {
-    transform: scale(1.1);
+function showPointsPop(points) {
+    if (!game) return;
+    const rect = pizza.getBoundingClientRect();
+    const parentRect = game.getBoundingClientRect();
+    const x = rect.left + rect.width / 2 - parentRect.left;
+    const y = rect.top + rect.height / 2 - parentRect.top;
+    const el = document.createElement('div');
+    el.className = 'points-pop';
+    el.textContent = `+${points}`;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    game.appendChild(el);
+    setTimeout(() => { el.remove(); }, 800);
 }
 
-/* GAME AREA */
-#game {
-    width: 100%;
-    height: 100%;
-    position: relative;
-
-    /* ensure the game sits below the menu initially */
-    z-index: 1;
+// Global synthesized water-drop sound on any click in the document
+let audioCtx = null;
+function ensureAudio() {
+    if (!audioCtx) {
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            audioCtx = null;
+        }
+    }
 }
 
-/* Pizza image in game */
-#pizza {
-    position: absolute;
-    width: clamp(80px, 22vw, 200px);
-    height: auto;
-    cursor: pointer;
-    /* center the image at the given top/left coordinates */
-    transform: translate(-50%, -50%);
+function playDropSound() {
+    ensureAudio();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    // simple short filtered noise burst to sound like a water drop
+    const bufferSize = audioCtx.sampleRate * 0.15; // 150ms
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    // fill with random noise shaped by an envelope
+    for (let i = 0; i < bufferSize; i++) {
+        const t = i / bufferSize;
+        // fast decay envelope
+        const env = Math.pow(1 - t, 3);
+        data[i] = (Math.random() * 2 - 1) * 0.6 * env;
+    }
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 700;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.exponentialRampToValueAtTime(0.6, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    source.start(now);
+    source.stop(now + 0.16);
 }
 
-/* HUD */
-#hud {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    background: rgba(255,255,255,0.7);
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-weight: bold;
-    z-index: 20;
-    display: flex;
-    gap: 12px;
+// Play drop sound on any click anywhere in the page
+document.addEventListener('click', (e) => {
+    // avoid double-playing when pizza click already called playDropSound: debounce by tiny timeout
+    // but it's okay if it plays twice, so we simply call playDropSound for every click
+    playDropSound();
+});
+
+
+
+// play a low short 'zero' sound to indicate zero hits
+function playZeroSound() {
+    ensureAudio();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(120, now);
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    o.start(now);
+    o.stop(now + 0.36);
 }
 
-#hud span { font-size: 14px; }
-
-#hud span { white-space: nowrap; }
-
-/* floating points pop */
-.points-pop {
-    position: absolute;
-    pointer-events: none;
-    font-weight: bold;
-    color: #ff5722;
-    text-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    transform: translate(-50%, -50%) scale(1);
-    animation: popUp 700ms ease-out forwards;
-    z-index: 40;
+// Rules modal handlers
+const rulesBtn = document.getElementById('rules-btn');
+const rulesModal = document.getElementById('rules-modal');
+const closeRules = document.getElementById('close-rules');
+if (rulesBtn && rulesModal) {
+    rulesBtn.addEventListener('click', () => {
+        rulesModal.style.display = 'flex';
+    });
 }
-
-@keyframes popUp {
-    0% { opacity: 1; transform: translate(-50%, -50%) translateY(0) scale(1); }
-    60% { opacity: 1; transform: translate(-50%, -120%) translateY(-20px) scale(1.1); }
-    100% { opacity: 0; transform: translate(-50%, -220%) translateY(-40px) scale(1.2); }
-}
-
-/* Level results modal (medium) */
-#level-results {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 50;
-    background: rgba(0,0,0,0.4);
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.results-card {
-    width: 420px; /* medium */
-    background: #fff;
-    padding: 18px;
-    border-radius: 10px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
-    text-align: center;
-}
-
-.results-stats {
-    display:flex;
-    gap:12px;
-    justify-content: center;
-    margin: 12px 0;
-}
-
-.results-stats > div {
-    min-width: 100px;
-}
-
-.results-actions {
-    display:flex;
-    gap:12px;
-    justify-content: center;
-    margin-top: 12px;
-}
-
-.results-actions button {
-    padding: 8px 16px;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-#continue-btn { background: #4caf50; color: #fff; }
-#quit-btn { background: #f44336; color: #fff; }
-
-/* Rules modal reuse card style; keep consistent */
-/* Rules modal styling - pixel / retro look */
-#rules-modal { z-index: 60; position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); width:100%; height:100%; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.35); }
-#rules-modal .results-card { width: 520px; padding: 20px; background: linear-gradient(180deg,#111827,#0b1220); border: 4px solid #f3f4f6; box-shadow: 0 8px 30px rgba(0,0,0,0.6); color: #fff; }
-
-/* Pixel-style font effect for the rules card */
-#rules-modal .results-card, #rules-modal .results-card p, #rules-modal .results-card li {
-    font-family: 'Courier New', Courier, monospace;
-    letter-spacing: 1px;
-    text-shadow: 0 1px 0 rgba(0,0,0,0.8), 1px 0 0 rgba(0,0,0,0.8);
-}
-
-#rules-modal h2 { font-family: 'Courier New', Courier, monospace; color: #ffeb3b; margin-bottom: 8px; text-transform: uppercase; }
-#rules-modal ul { margin-left: 18px; }
-
-#rules-modal .results-actions { margin-top: 14px; }
-#rules-modal .results-actions button { background:#2196f3; color:white }
-
-/* Make level results visually match the rules modal */
-#level-results .results-card { width: 520px; padding: 20px; background: linear-gradient(180deg,#111827,#0b1220); border: 4px solid #f3f4f6; box-shadow: 0 8px 30px rgba(0,0,0,0.6); color: #fff; }
-#level-results .results-card, #level-results .results-card p, #level-results .results-card li {
-    font-family: 'Courier New', Courier, monospace;
-    letter-spacing: 1px;
-    text-shadow: 0 1px 0 rgba(0,0,0,0.8), 1px 0 0 rgba(0,0,0,0.8);
-}
-#level-results h2 { font-family: 'Courier New', Courier, monospace; color: #ffeb3b; margin-bottom: 8px; text-transform: uppercase; }
-#level-results .results-actions { margin-top: 14px; }
-#level-results .results-actions button { background:#2196f3; color:white }
-
-/* Responsive tweaks for small screens (phones) */
-@media (max-width: 600px) {
-    body { font-size: 14px; }
-    #menu { top: 42%; }
-    #menu img#logo { width: clamp(120px, 48vw, 240px); }
-    #menu img#start-btn { width: clamp(120px, 48vw, 180px); }
-    .menu-btn { padding: 12px 20px; font-size: 16px; border-radius: 10px; }
-    #pizza { width: clamp(64px, 26vw, 160px); }
-    #hud { top: 8px; left: 8px; padding: 8px 12px; gap: 8px; }
-    #hud span { font-size: 15px; }
-    .results-card, #rules-modal .results-card, #level-results .results-card { width: min(92%, 520px); padding: 14px; }
-    .results-stats { flex-direction: column; gap: 8px; }
-    .results-actions { flex-direction: row; gap: 10px; }
-    .results-actions button { padding: 10px 14px; font-size: 15px; }
-}
-
-@media (max-width: 380px) {
-    body { font-size: 13px; }
-    #menu { top: 40%; }
-    #menu img#logo { width: clamp(100px, 56vw, 200px); }
-    #menu img#start-btn { width: clamp(100px, 56vw, 160px); }
-    .menu-btn { padding: 10px 16px; font-size: 15px; }
-    #pizza { width: clamp(56px, 30vw, 140px); }
-    #hud { font-size: 13px; }
+if (closeRules && rulesModal) {
+    closeRules.addEventListener('click', () => {
+        rulesModal.style.display = 'none';
+    });
 }
