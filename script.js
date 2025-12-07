@@ -358,4 +358,3 @@ if (closeRules && rulesModal) {
         rulesModal.style.display = 'none';
     });
 }
-
