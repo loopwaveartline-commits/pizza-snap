@@ -12,6 +12,7 @@ body {
     overflow: hidden;
     /* use the pixel/monospace look for all game text */
     font-family: 'Courier New', Courier, monospace;
+    font-size: 16px; /* base font-size for desktop */
 }
 
 /* MENU */
@@ -27,12 +28,12 @@ body {
 }
 
 #menu img#logo {
-    width: 300px;  /* adjust size */
+    width: clamp(160px, 40vw, 300px);
     margin-bottom: 20px;
 }
 
 #menu img#start-btn {
-    width: 200px; /* adjust size */
+    width: clamp(140px, 48vw, 200px); /* responsive start button */
     cursor: pointer;
     transition: 0.2s;
 }
@@ -72,8 +73,8 @@ body {
 /* Pizza image in game */
 #pizza {
     position: absolute;
-    width: 200px; /* doubled size */
-    height: 200px;
+    width: clamp(80px, 22vw, 200px);
+    height: auto;
     cursor: pointer;
     /* center the image at the given top/left coordinates */
     transform: translate(-50%, -50%);
@@ -92,6 +93,8 @@ body {
     display: flex;
     gap: 12px;
 }
+
+#hud span { font-size: 14px; }
 
 #hud span { white-space: nowrap; }
 
@@ -194,3 +197,29 @@ body {
 #level-results h2 { font-family: 'Courier New', Courier, monospace; color: #ffeb3b; margin-bottom: 8px; text-transform: uppercase; }
 #level-results .results-actions { margin-top: 14px; }
 #level-results .results-actions button { background:#2196f3; color:white }
+
+/* Responsive tweaks for small screens (phones) */
+@media (max-width: 600px) {
+    body { font-size: 14px; }
+    #menu { top: 42%; }
+    #menu img#logo { width: clamp(120px, 48vw, 240px); }
+    #menu img#start-btn { width: clamp(120px, 48vw, 180px); }
+    .menu-btn { padding: 12px 20px; font-size: 16px; border-radius: 10px; }
+    #pizza { width: clamp(64px, 26vw, 160px); }
+    #hud { top: 8px; left: 8px; padding: 8px 12px; gap: 8px; }
+    #hud span { font-size: 15px; }
+    .results-card, #rules-modal .results-card, #level-results .results-card { width: min(92%, 520px); padding: 14px; }
+    .results-stats { flex-direction: column; gap: 8px; }
+    .results-actions { flex-direction: row; gap: 10px; }
+    .results-actions button { padding: 10px 14px; font-size: 15px; }
+}
+
+@media (max-width: 380px) {
+    body { font-size: 13px; }
+    #menu { top: 40%; }
+    #menu img#logo { width: clamp(100px, 56vw, 200px); }
+    #menu img#start-btn { width: clamp(100px, 56vw, 160px); }
+    .menu-btn { padding: 10px 16px; font-size: 15px; }
+    #pizza { width: clamp(56px, 30vw, 140px); }
+    #hud { font-size: 13px; }
+}
