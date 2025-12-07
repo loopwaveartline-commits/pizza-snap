@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Spot the Pizza</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- MENU -->
+    <div id="menu">
+        <img id="logo" src="assets/logo.png" alt="Spot the Pizza Logo">
+        <img id="start-btn" src="assets/start-btn.png" alt="Start Button">
+        <button id="rules-btn" class="menu-btn">Rules</button>
+    </div>
+
+    <!-- GAME AREA -->
+    <div id="game">
+        <img id="pizza" src="assets/pizza.png" alt="Pizza" style="display:none;">
+    </div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <span id="score">Score: 0</span>
+        <span id="level">Level: 1</span>
+        <span id="combo">Combo: x1</span>
+        <span id="highscore">High: 0</span>
+    </div>
+
+    <!-- Level Results Modal (medium) -->
+    <div id="level-results" style="display:none;">
+        <div class="results-card">
+            <h2 id="results-title">Level Results</h2>
+            <div class="results-stats">
+                <div id="res-level">Level: 1</div>
+                <div id="res-hits">Hits: 0</div>
+                <div id="res-score">Score: 0</div>
+                <div id="res-points">Points: 0</div>
+            </div>
+            <div class="results-actions">
+                <button id="continue-btn">Continue</button>
+                <button id="quit-btn">Quit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules Modal -->
+    <div id="rules-modal" style="display:none;">
+        <div class="results-card">
+            <h2>How to Play</h2>
+            <p>Each level shows pizzas in different positions 20 times. Catch them by:</p>
+            <ul>
+                <li>Clicking the pizza when it appears.</li>
+                <li>Or using the arrow keys: <strong>Up</strong> for top, <strong>Down</strong> for bottom, <strong>Left</strong> for left, <strong>Right</strong> for right.</li>
+                <li>The center pizza can be caught by clicking it or by pressing <strong>0</strong> (zero) on your keyboard. Arrow keys do not catch center.</li>
+            </ul>
+            <p>Speed increases each level. After 20 appearances the level ends and you see results.</p>
+            <div class="results-actions">
+                <button id="close-rules">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- This line MUST be at the very bottom -->
+    <script src="script.js"></script>
+</body>
+</html>
